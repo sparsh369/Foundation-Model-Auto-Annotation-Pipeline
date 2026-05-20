@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: annotation-gpu-worker
+  namespace: {{ .Values.global.namespace }}
+spec:
+  replicas: 0
+  selector:
+    matchLabels: { app: annotation-gpu-worker }
+  template:
+    metadata:
+      labels: { app: annotation-gpu-worker }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+    spec:
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: worker
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.gpuWorker.image }}:{{ .Values.gpuWorker.tag }}"
+          command: ["celery", "-A", "workers.celery_app.celery_app", "worker",
+                    "-l", "info", "-Q", "{{ .Values.gpuWorker.queues }}",
+                    "--concurrency={{ .Values.gpuWorker.concurrency }}"]
+          envFrom:
+            - configMapRef: { name: annotation-config }
+            - secretRef: { name: annotation-secrets }
+          resources:
+            requests:
+              cpu: {{ .Values.gpuWorker.resources.requests.cpu | quote }}
+              memory: {{ .Values.gpuWorker.resources.requests.memory | quote }}
+              nvidia.com/gpu: {{ .Values.gpuWorker.gpu | quote }}
+            limits:
+              cpu: {{ .Values.gpuWorker.resources.limits.cpu | quote }}
+              memory: {{ .Values.gpuWorker.resources.limits.memory | quote }}
+              nvidia.com/gpu: {{ .Values.gpuWorker.gpu | quote }}
+{{- if .Values.gpuWorker.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: annotation-gpu-worker
+  namespace: {{ .Values.global.namespace }}
+spec:
+  scaleTargetRef: { name: annotation-gpu-worker }
+  minReplicaCount: {{ .Values.gpuWorker.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.gpuWorker.keda.maxReplicaCount }}
+  triggers:
+    - type: redis
+      metadata:
+        address: annotation-redis:6379
+        listName: inference
+        listLength: {{ .Values.gpuWorker.keda.listLength | quote }}
+        databaseIndex: "1"
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: annotation-cpu-worker
+  namespace: {{ .Values.global.namespace }}
+spec:
+  replicas: {{ .Values.cpuWorker.replicas }}
+  selector:
+    matchLabels: { app: annotation-cpu-worker }
+  template:
+    metadata:
+      labels: { app: annotation-cpu-worker }
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.gpuWorker.image }}:{{ .Values.gpuWorker.tag }}"
+          command: ["celery", "-A", "workers.celery_app.celery_app", "worker",
+                    "-l", "info", "-Q", "{{ .Values.cpuWorker.queues }}",
+                    "--concurrency={{ .Values.cpuWorker.concurrency }}"]
+          envFrom:
+            - configMapRef: { name: annotation-config }
+            - secretRef: { name: annotation-secrets }

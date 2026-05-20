@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.env
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ML weights / artifacts
+weights/
+*.pth
+*.pt
+*.onnx
+mlruns/
+wandb/
+data/
+outputs/
+outputs_real/
+samples/
+
+# Node / frontend
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# Infra
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.log

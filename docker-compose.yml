@@ -1,0 +1,115 @@
+name: fm-auto-annotation
+
+x-app-env: &app-env
+  ENVIRONMENT: local
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: annotator
+  POSTGRES_PASSWORD: annotator
+  POSTGRES_DB: annotation
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_ACCESS_KEY: minioadmin
+  S3_SECRET_KEY: minioadmin
+  S3_BUCKET: annotations
+  SECRET_KEY: local_dev_secret_key_change_me_0123456789abcdef
+  PIPELINE_MOCK_MODELS: "true"
+  DEVICE: cpu
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: annotator
+      POSTGRES_PASSWORD: annotator
+      POSTGRES_DB: annotation
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U annotator -d annotation"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["miniodata:/data"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  createbuckets:
+    image: minio/mc:latest
+    depends_on: { minio: { condition: service_healthy } }
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb -p local/annotations || true;
+      exit 0;"
+
+  api:
+    build: { context: ., dockerfile: infra/docker/Dockerfile.api }
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    command: >
+      sh -c "alembic upgrade head &&
+             python -m backend.scripts.seed &&
+             uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"
+    ports: ["8000:8000"]
+
+  worker:
+    build: { context: ., dockerfile: infra/docker/Dockerfile.worker }
+    environment: *app-env
+    depends_on:
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    command: celery -A workers.celery_app.celery_app worker -l info -Q inference,export,active_learning --concurrency=2
+
+  flower:
+    build: { context: ., dockerfile: infra/docker/Dockerfile.worker }
+    environment: *app-env
+    depends_on: [redis]
+    command: celery -A workers.celery_app.celery_app flower --port=5555
+    ports: ["5555:5555"]
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes: ["./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

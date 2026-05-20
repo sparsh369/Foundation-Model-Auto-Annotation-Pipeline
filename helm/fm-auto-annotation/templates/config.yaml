@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: annotation-config
+  namespace: {{ .Values.global.namespace }}
+data:
+  ENVIRONMENT: "production"
+  LOG_JSON: "true"
+  DEVICE: {{ .Values.config.device | quote }}
+  PIPELINE_MOCK_MODELS: {{ .Values.config.mockModels | quote }}
+  INFERENCE_BATCH_SIZE: {{ .Values.config.inferenceBatchSize | quote }}
+  CONF_AUTO_APPROVE: {{ .Values.config.confAutoApprove | quote }}
+  CONF_HUMAN_REVIEW: {{ .Values.config.confHumanReview | quote }}
+  POSTGRES_HOST: {{ ternary .Values.postgres.host "annotation-postgres" .Values.postgres.managed | quote }}
+  REDIS_URL: {{ printf "redis://%s:6379/0" (ternary .Values.redis.host "annotation-redis" .Values.redis.managed) | quote }}
+  CELERY_BROKER_URL: {{ printf "redis://%s:6379/1" (ternary .Values.redis.host "annotation-redis" .Values.redis.managed) | quote }}
+  CELERY_RESULT_BACKEND: {{ printf "redis://%s:6379/2" (ternary .Values.redis.host "annotation-redis" .Values.redis.managed) | quote }}

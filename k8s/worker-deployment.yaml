@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: annotation-gpu-worker
+  namespace: annotation
+  labels: { app: annotation-gpu-worker }
+spec:
+  replicas: 0          # KEDA scales from 0 based on queue depth
+  selector:
+    matchLabels: { app: annotation-gpu-worker }
+  template:
+    metadata:
+      labels: { app: annotation-gpu-worker }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4   # or aws/azure equivalent
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: worker
+          image: ghcr.io/acme/fm-annotation-worker:latest
+          command: ["celery", "-A", "workers.celery_app.celery_app", "worker",
+                    "-l", "info", "-Q", "inference", "--concurrency=1"]
+          envFrom:
+            - configMapRef: { name: annotation-config }
+            - secretRef: { name: annotation-secrets }
+          ports: [{ containerPort: 9100, name: metrics }]
+          resources:
+            requests: { cpu: "2", memory: "8Gi", nvidia.com/gpu: "1" }
+            limits: { cpu: "4", memory: "16Gi", nvidia.com/gpu: "1" }
+          volumeMounts:
+            - { name: weights, mountPath: /weights, readOnly: true }
+      volumes:
+        - name: weights
+          persistentVolumeClaim: { claimName: model-weights }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: annotation-cpu-worker
+  namespace: annotation
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: annotation-cpu-worker }
+  template:
+    metadata:
+      labels: { app: annotation-cpu-worker }
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/acme/fm-annotation-worker:latest
+          command: ["celery", "-A", "workers.celery_app.celery_app", "worker",
+                    "-l", "info", "-Q", "export,active_learning", "--concurrency=4"]
+          envFrom:
+            - configMapRef: { name: annotation-config }
+            - secretRef: { name: annotation-secrets }
+          resources:
+            requests: { cpu: "500m", memory: "1Gi" }
+            limits: { cpu: "2", memory: "4Gi" }

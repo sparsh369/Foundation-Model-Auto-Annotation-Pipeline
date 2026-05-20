@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: annotator
+          POSTGRES_PASSWORD: annotator
+          POSTGRES_DB: annotation
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U annotator" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      SECRET_KEY: ci_secret_key_min_32_chars_0123456789abc
+      PIPELINE_MOCK_MODELS: "true"
+      DEVICE: cpu
+      POSTGRES_HOST: localhost
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - name: Ruff
+        run: ruff check backend ml workers tests
+      - name: Type check
+        run: mypy backend ml workers || true
+      - name: Migrate
+        run: alembic upgrade head
+      - name: Tests
+        run: pytest -q

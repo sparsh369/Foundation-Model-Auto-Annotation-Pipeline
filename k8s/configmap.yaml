@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: annotation-config
+  namespace: annotation
+data:
+  ENVIRONMENT: "production"
+  LOG_JSON: "true"
+  API_V1_PREFIX: "/api/v1"
+  POSTGRES_HOST: "annotation-postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "annotation"
+  REDIS_URL: "redis://annotation-redis:6379/0"
+  CELERY_BROKER_URL: "redis://annotation-redis:6379/1"
+  CELERY_RESULT_BACKEND: "redis://annotation-redis:6379/2"
+  S3_BUCKET: "annotations"
+  DEVICE: "cuda"
+  PIPELINE_MOCK_MODELS: "false"
+  INFERENCE_BATCH_SIZE: "8"
+  PROMETHEUS_ENABLED: "true"

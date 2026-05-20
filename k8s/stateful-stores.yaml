@@ -1,0 +1,57 @@
+# Dev-grade in-cluster Postgres + Redis. In production use managed services
+# (RDS/Cloud SQL, ElastiCache/Memorystore) and delete these.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: annotation-postgres
+  namespace: annotation
+spec:
+  serviceName: annotation-postgres
+  replicas: 1
+  selector: { matchLabels: { app: annotation-postgres } }
+  template:
+    metadata: { labels: { app: annotation-postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef: { name: annotation-secrets }
+          env:
+            - { name: POSTGRES_DB, value: annotation }
+          ports: [{ containerPort: 5432 }]
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: 50Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: annotation-postgres, namespace: annotation }
+spec:
+  selector: { app: annotation-postgres }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: annotation-redis, namespace: annotation }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: annotation-redis } }
+  template:
+    metadata: { labels: { app: annotation-redis } }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: ["--appendonly", "yes"]
+          ports: [{ containerPort: 6379 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: annotation-redis, namespace: annotation }
+spec:
+  selector: { app: annotation-redis }
+  ports: [{ port: 6379 }]

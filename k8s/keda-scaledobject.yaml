@@ -1,0 +1,21 @@
+# KEDA scales GPU workers on Redis broker queue length: 1 pod per ~10 queued images,
+# down to zero when idle (spot/preemptible-friendly cost optimization).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: annotation-gpu-worker
+  namespace: annotation
+spec:
+  scaleTargetRef:
+    name: annotation-gpu-worker
+  minReplicaCount: 0
+  maxReplicaCount: 50
+  cooldownPeriod: 120
+  pollingInterval: 15
+  triggers:
+    - type: redis
+      metadata:
+        address: annotation-redis:6379
+        listName: inference          # Celery default-routes this queue into a Redis list
+        listLength: "10"
+        databaseIndex: "1"

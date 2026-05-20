@@ -1,0 +1,10 @@
+# Extra dependencies ONLY for real-model local testing of Option A (CPU-friendly).
+# These are NOT needed to run the control plane in mock mode. Install with:
+#   pip install -r requirements-test.txt
+#
+# On Windows/CPU, `pip install torch` already resolves to the CPU build.
+torch>=2.2
+torchvision>=0.17
+transformers>=4.44
+open-clip-torch>=2.24
+timm>=1.0

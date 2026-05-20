@@ -1,0 +1,32 @@
+# ── GPU inference worker image ───────────────────────────────────
+# Base on CUDA runtime so torch can use the GPU. For CPU-only local runs the same image
+# works (torch falls back to CPU and PIPELINE_MOCK_MODELS short-circuits heavy paths).
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS base
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3-pip libpq-dev libgl1 libglib2.0-0 git && \
+    ln -sf /usr/bin/python3.11 /usr/bin/python && rm -rf /var/lib/apt/lists/*
+
+# Install torch matched to the CUDA base, then app deps.
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu124
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend ./backend
+COPY ml ./ml
+COPY workers ./workers
+
+RUN useradd -m appuser && chown -R appuser /app
+USER appuser
+
+# Override the queue list per deployment (inference / export / active_learning).
+CMD ["celery", "-A", "workers.celery_app.celery_app", "worker", "-l", "info", \
+     "-Q", "inference", "--concurrency=1"]

@@ -1,0 +1,55 @@
+global:
+  namespace: annotation
+  imageRegistry: ghcr.io/acme
+
+api:
+  image: fm-annotation-api
+  tag: latest
+  replicas: 3
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 30
+    targetCPUUtilizationPercentage: 65
+
+gpuWorker:
+  image: fm-annotation-worker
+  tag: latest
+  queues: "inference"
+  concurrency: 1
+  gpu: 1
+  keda:
+    enabled: true
+    minReplicaCount: 0
+    maxReplicaCount: 50
+    listLength: "10"
+  resources:
+    requests: { cpu: "2", memory: 8Gi }
+    limits: { cpu: "4", memory: 16Gi }
+
+cpuWorker:
+  queues: "export,active_learning"
+  replicas: 2
+  concurrency: 4
+
+config:
+  device: cuda
+  mockModels: false
+  inferenceBatchSize: 8
+  confAutoApprove: 0.85
+  confHumanReview: 0.50
+
+postgres:
+  managed: true        # set false to deploy the in-cluster StatefulSet
+  host: ""             # managed endpoint
+redis:
+  managed: true
+  host: ""
+
+ingress:
+  enabled: true
+  host: annotate.example.com
+  tls: true

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fm-auto-annotation"
+version = "0.1.0"
+description = "Foundation-Model Auto-Annotation Pipeline"
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = ["backend", "ml", "workers"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["backend", "ml", "workers", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "C4", "SIM", "ASYNC"]
+ignore = ["B008"]  # FastAPI Depends() in defaults
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra -q"
